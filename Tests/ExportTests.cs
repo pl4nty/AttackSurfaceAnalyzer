@@ -407,5 +407,63 @@ namespace Microsoft.CST.AttackSurfaceAnalyzer.Tests
             Assert.AreEqual(41, sarif.Runs[0].Tool.Driver.Rules.Count);
             Assert.IsTrue(sarif.Runs[0].Tool.Driver.Rules.Any(r => r.FullDescription.Text == "Flag when privileged ports are opened."));
         }
+
+        /// <summary>
+        ///     Identities such as a process "PID:Name" or a registry path containing a drive
+        ///     letter were previously emitted as relative SARIF URIs whose first path segment
+        ///     contained a colon, which consumers (e.g. GitHub code scanning) reject. Ensure
+        ///     such identities are disambiguated into valid URI references.
+        /// </summary>
+        [TestMethod]
+        public void TestGenerateSarifLogDisambiguatesColonIdentities()
+        {
+            Dictionary<string, string> metadata = new()
+            {
+                { "compare-version", "2.4.10-alpha+5351e91d1c" },
+                { "compare-os", "WINDOWS" },
+                { "compare-osversion", "Microsoft Windows NT 10.0.19043.0" },
+                { "analyses-hash", "yXvUiHy+rkKstAubfKrepSYhf7tGW6Fmpq72cvzjHu/IFkPu1P6FEstdy15fnGvxhAyIcIzdWFTILRTZ6wy0yA==" }
+            };
+
+            Dictionary<string, ConcurrentBag<CompareResult>> output = new()
+            {
+                {
+                    "PROCESS_CREATED", new ConcurrentBag<CompareResult>()
+                    {
+                        new()
+                        {
+                            Analysis = ANALYSIS_RESULT_TYPE.WARNING,
+                            Compare = new ProcessObject(10132, "svchost")
+                        },
+                        new()
+                        {
+                            Analysis = ANALYSIS_RESULT_TYPE.WARNING,
+                            Compare = new RegistryObject(
+                                "HKEY_CURRENT_USER\\SOFTWARE\\Classes\\Local Settings\\MrtCache\\C:\\Windows\\resources.pri",
+                                Microsoft.Win32.RegistryView.Registry64)
+                        }
+                    }
+                }
+            };
+
+            AsaResults outputDictionary = new(metadata, output);
+
+            var sarif = AttackSurfaceAnalyzerClient.GenerateSarifLog(outputDictionary, Array.Empty<AsaRule>(), false);
+
+            Assert.AreEqual(2, sarif.Runs[0].Artifacts.Count);
+
+            foreach (var artifact in sarif.Runs[0].Artifacts)
+            {
+                Assert.IsNotNull(artifact.Location.Uri);
+
+                // Mirrors the consumer check: the path is split on '/' and the first path
+                // segment must not contain a colon.
+                var firstSegment = artifact.Location.Uri.OriginalString.Split('/')[0];
+                Assert.IsFalse(firstSegment.Contains(':'),
+                    $"First path segment of '{artifact.Location.Uri.OriginalString}' must not contain a colon.");
+            }
+
+            Assert.IsTrue(sarif.Runs[0].Artifacts.Any(a => a.Location.Uri.OriginalString == "./10132:svchost"));
+        }
     }
 }

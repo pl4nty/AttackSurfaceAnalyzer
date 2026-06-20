@@ -884,17 +884,10 @@ namespace Microsoft.CST.AttackSurfaceAnalyzer.Cli
                     }
                     else
                     {
-                        // The identity is a relative reference (e.g. "10132:svchost" for a process,
-                        // or a registry path containing "C:"). Per RFC 3986 / the SARIF spec, if the
-                        // first path segment of a relative URI reference contains a colon it is
-                        // ambiguous with a scheme and consumers (such as GitHub code scanning) reject
-                        // it with "first path segment in URL cannot contain colon". Prefixing it with
-                        // "./" disambiguates it without losing information.
-                        var relativeReference = compareResult.Identity;
-                        if (relativeReference.Split('/')[0].Contains(':'))
-                        {
-                            relativeReference = "./" + relativeReference;
-                        }
+                        var relativePrefix = $".{Path.AltDirectorySeparatorChar}";
+                        var relativeReference = compareResult.Identity.StartsWith(relativePrefix, StringComparison.Ordinal)
+                            ? compareResult.Identity
+                            : $"{relativePrefix}{compareResult.Identity}";
 
                         if (Uri.TryCreate(relativeReference, UriKind.Relative, out Uri? relativeUri))
                         {
