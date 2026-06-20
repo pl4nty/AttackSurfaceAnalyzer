@@ -119,9 +119,11 @@ jobs:
       - name: Pack CLI tool
         run: dotnet pack Cli/Cli.csproj -c Release -o packages
 
-      - name: Upload to latest release
+      - name: Upload packages
         uses: softprops/action-gh-release@v2
         with:
           tag_name: latest
           prerelease: true
-          files: packages/*
+          files: |
+            packages/*.nupkg
+            packages/*.snupkg
