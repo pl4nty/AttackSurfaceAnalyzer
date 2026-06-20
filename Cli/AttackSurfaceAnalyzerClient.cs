@@ -884,11 +884,7 @@ namespace Microsoft.CST.AttackSurfaceAnalyzer.Cli
                     }
                     else
                     {
-                        var relativeReference = compareResult.Identity.StartsWith("./", StringComparison.Ordinal)
-                            ? compareResult.Identity
-                            : $"./{compareResult.Identity}";
-
-                        if (Uri.TryCreate(relativeReference, UriKind.Relative, out Uri? relativeUri))
+                        if (Uri.TryCreate($"./{compareResult.Identity}", UriKind.Relative, out Uri? relativeUri))
                         {
                             artifact.Location.Uri = relativeUri;
                         }
