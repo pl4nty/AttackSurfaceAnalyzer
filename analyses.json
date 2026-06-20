@@ -1440,7 +1440,18 @@
           "Field": "Key",
           "Operation": "Regex",
           "Data": [
-            "MrtCache"
+            "MrtCache",
+            "ControlSet\\w*\\\\Services$",
+            "Services\\\\bam\\\\State\\\\UserSettings",
+            "Services\\\\PcaSvc",
+            "Services\\\\SharedAccess\\\\Epoch",
+            "Services\\\\SharedAccess\\\\Parameters\\\\FirewallPolicy\\\\FirewallRules",
+            "Services\\\\W32Time\\\\Config",
+            "Software\\\\Microsoft\\\\TIP\\\\AggregateResults",
+            "CurrentVersion\\\\Policies\\\\System$",
+            "CurrentVersion\\\\Schedule\\\\TaskCache\\\\Tasks\\\\",
+            "CurrentVersion\\\\UFH\\\\ARP",
+            "CurrentVersion\\\\Uninstall$"
           ]
         }
       ]
