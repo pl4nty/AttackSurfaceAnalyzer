@@ -4,9 +4,8 @@ name: Build
 # Produces CLI publish archives and NuGet packages as build artifacts after
 # changes land on main or a release branch.
 #
-# On main and release/** branches, the published CLI archives and NuGet packages
-# are also uploaded to the rolling "latest" GitHub Release
-# (https://github.com/pl4nty/AttackSurfaceAnalyzer/releases/tag/latest).
+# On main and release/** branches the archives and packages are also uploaded to
+# the rolling "latest" GitHub Release.
 #
 # Note: the original release pipeline also performs ESRP code signing,
 # AntiMalware scanning and publishing to nuget.org. Those steps depend on
@@ -28,6 +27,8 @@ jobs:
   publish:
     name: Publish ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
+    permissions:
+      contents: write
     strategy:
       fail-fast: false
       matrix:
@@ -102,9 +103,19 @@ jobs:
           name: ASA_${{ matrix.name }}
           path: ASA_${{ matrix.name }}_*.zip
 
+      - name: Upload to latest release
+        if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/')
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          prerelease: true
+          files: ASA_${{ matrix.name }}_*.zip
+
   pack:
     name: Pack NuGet packages
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
         with:
@@ -135,27 +146,12 @@ jobs:
             packages/*.nupkg
             packages/*.snupkg
 
-  release:
-    name: Publish to latest release
-    needs: [publish, pack]
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/')
-    permissions:
-      contents: write
-    steps:
-      - name: Download artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: artifacts
-
-      - name: Publish to latest release
+      - name: Upload to latest release
+        if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/')
         uses: softprops/action-gh-release@v2
         with:
           tag_name: latest
-          name: Latest
           prerelease: true
-          fail_on_unmatched_files: true
           files: |
-            artifacts/**/*.zip
-            artifacts/**/*.nupkg
-            artifacts/**/*.snupkg
+            packages/*.nupkg
+            packages/*.snupkg
