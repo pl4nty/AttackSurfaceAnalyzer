@@ -29,14 +29,19 @@ jobs:
     - uses: actions/checkout@v4
       with:
         fetch-depth: 0
-    - name: Setup .NET Core
-      uses: actions/setup-dotnet@v1
+    - name: Use public NuGet feed
+      shell: bash
+      run: cp NuGet.Config.Public nuget.config
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
       with:
-        dotnet-version: '8.x'
-    - name: Install chocolatey
-      run: Set-ExecutionPolicy Bypass -Scope Process -Force; [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072; iex ((New-Object System.Net.WebClient).DownloadString('https://chocolatey.org/install.ps1'))
+        dotnet-version: |
+          8.0.x
+          9.0.x
     - name: Install docfx
-      run: choco install docfx
+      run: dotnet tool update -g docfx
+    - name: Restore Lib
+      run: dotnet restore Lib/Lib.csproj
     - name: Run DocFx
       run: docfx docfx/docfx.json
     - name: Setup Pages
