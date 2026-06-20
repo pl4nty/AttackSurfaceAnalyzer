@@ -340,17 +340,19 @@ namespace Microsoft.CST.AttackSurfaceAnalyzer.Collectors
                         {
                             group.Users = new List<string>();
 
-                            //Get the members of the group
-                            var args = $"/Node:\"{Environment.MachineName}\" path win32_groupuser where (groupcomponent=\"win32_group.name=\\\"{groupName}\\\",domain=\\\"{Environment.MachineName}\\\"\")";
-                            List<string> lines_int = new(ExternalCommandRunner.RunExternalCommand("wmic", args).Split('\n'));
-                            lines_int.RemoveRange(0, 1);
+                            //Get the members of the group via the Win32_GroupUser association
+                            //class. This replaces the deprecated wmic command.
+                            var memberQuery = new SelectQuery($"SELECT * FROM Win32_GroupUser WHERE GroupComponent=\"Win32_Group.Domain='{Environment.MachineName}',Name='{groupName}'\"");
+                            using var memberSearcher = new ManagementObjectSearcher(memberQuery);
 
                             groups[$"{Environment.MachineName}\\{groupName}"] = group;
 
-                            foreach (string line_int in lines_int)
+                            foreach (ManagementObject member in memberSearcher.Get())
                             {
-                                var userName = line_int.Trim();
-                                if (string.IsNullOrEmpty(userName) || !userName.Contains("Domain"))
+                                if (cancellationToken.IsCancellationRequested) { break; }
+
+                                var partComponent = Convert.ToString(member["PartComponent"], CultureInfo.InvariantCulture);
+                                if (string.IsNullOrEmpty(partComponent) || !partComponent.Contains("Domain"))
                                 {
                                     continue;
                                 }
@@ -358,8 +360,8 @@ namespace Microsoft.CST.AttackSurfaceAnalyzer.Collectors
                                 {
                                     Regex r = new(@".*Win32_UserAccount.Domain=""(.*?)"",Name=""(.*?)""");
 
-                                    var domain = r.Match(userName).Groups[1].Value;
-                                    userName = r.Match(userName).Groups[2].Value;
+                                    var domain = r.Match(partComponent).Groups[1].Value;
+                                    var userName = r.Match(partComponent).Groups[2].Value;
 
                                     if (string.IsNullOrEmpty(userName))
                                     {
