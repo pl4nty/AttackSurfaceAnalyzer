@@ -884,10 +884,9 @@ namespace Microsoft.CST.AttackSurfaceAnalyzer.Cli
                     }
                     else
                     {
-                        var relativePrefix = $".{Path.AltDirectorySeparatorChar}";
-                        var relativeReference = compareResult.Identity.StartsWith(relativePrefix, StringComparison.Ordinal)
+                        var relativeReference = compareResult.Identity.StartsWith("./", StringComparison.Ordinal)
                             ? compareResult.Identity
-                            : $"{relativePrefix}{compareResult.Identity}";
+                            : $"./{compareResult.Identity}";
 
                         if (Uri.TryCreate(relativeReference, UriKind.Relative, out Uri? relativeUri))
                         {
