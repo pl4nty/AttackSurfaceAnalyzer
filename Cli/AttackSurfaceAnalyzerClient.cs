@@ -878,17 +878,7 @@ namespace Microsoft.CST.AttackSurfaceAnalyzer.Cli
                         }
                     };
 
-                    if (Uri.TryCreate(compareResult.Identity, UriKind.Absolute, out Uri? absoluteUri))
-                    {
-                        artifact.Location.Uri = absoluteUri;
-                    }
-                    else
-                    {
-                        if (Uri.TryCreate($"./{compareResult.Identity}", UriKind.Relative, out Uri? relativeUri))
-                        {
-                            artifact.Location.Uri = relativeUri;
-                        }
-                    }
+                    artifact.Location.Uri = GetArtifactUri(compareResult);
 
                     artifact.SetProperty("Analysis", compareResult.Analysis);
 
@@ -997,6 +987,42 @@ namespace Microsoft.CST.AttackSurfaceAnalyzer.Cli
             log.Runs.Add(run);
 
             return log;
+        }
+
+        /// <summary>
+        ///     Builds a valid SARIF artifact URI for a result.
+        ///
+        ///     File paths and anything else that is already a well-formed absolute URI are
+        ///     used as-is (e.g. file paths surface as <c>file:///...</c>). Every other identity
+        ///     describes a logical artifact (a process, registry key, firewall rule, port, ...)
+        ///     whose identity string is not a valid URI on its own. Rather than dodging
+        ///     consumer validation by prefixing <c>./</c> (which left colons, spaces and
+        ///     backslashes in the path), these are encoded as absolute <c>asa://</c> URIs whose
+        ///     authority names the artifact type. Absolute URIs permit colons in their path
+        ///     segments, so identities such as <c>6628:svchost</c> no longer trip GitHub code
+        ///     scanning's "no colon in the first path segment" rule, and remaining unsafe
+        ///     characters are percent-encoded.
+        /// </summary>
+        internal static Uri GetArtifactUri(CompareResult compareResult)
+        {
+            var identity = compareResult.Identity;
+
+            // Already-valid absolute URIs (notably file paths) are used as-is.
+            if (Uri.TryCreate(identity, UriKind.Absolute, out Uri? absoluteUri))
+            {
+                return absoluteUri;
+            }
+
+            var authority = compareResult.ResultType.ToString().ToLowerInvariant();
+
+            // Treat Windows-style backslashes as path separators, then percent-encode each
+            // segment. Colons are preserved because they are legal in URI path segments.
+            var path = string.Join('/', identity
+                .Replace('\\', '/')
+                .Split('/')
+                .Select(segment => Uri.EscapeDataString(segment).Replace("%3A", ":")));
+
+            return new Uri($"asa://{authority}/{path}");
         }
 
         private static FailureLevel GetSarifFailureLevel(ANALYSIS_RESULT_TYPE type)

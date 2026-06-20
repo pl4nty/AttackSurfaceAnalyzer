@@ -410,12 +410,14 @@ namespace Microsoft.CST.AttackSurfaceAnalyzer.Tests
 
         /// <summary>
         ///     Identities such as a process "PID:Name" or a registry path containing a drive
-        ///     letter were previously emitted as relative SARIF URIs whose first path segment
-        ///     contained a colon, which consumers (e.g. GitHub code scanning) reject. Ensure
-        ///     such identities are disambiguated into valid URI references.
+        ///     letter are not valid URIs on their own. They must be emitted as proper SARIF
+        ///     artifact URIs: file paths as absolute file:// URIs, and other logical artifacts
+        ///     as absolute asa:// URIs whose authority names the artifact type. Absolute URIs
+        ///     are accepted by consumers (e.g. GitHub code scanning) that reject relative URIs
+        ///     whose first path segment contains a colon.
         /// </summary>
         [TestMethod]
-        public void TestGenerateSarifLogDisambiguatesColonIdentities()
+        public void TestGenerateSarifLogProducesValidArtifactUris()
         {
             Dictionary<string, string> metadata = new()
             {
@@ -441,6 +443,11 @@ namespace Microsoft.CST.AttackSurfaceAnalyzer.Tests
                             Compare = new RegistryObject(
                                 "HKEY_CURRENT_USER\\SOFTWARE\\Classes\\Local Settings\\MrtCache\\C:\\Windows\\resources.pri",
                                 Microsoft.Win32.RegistryView.Registry64)
+                        },
+                        new()
+                        {
+                            Analysis = ANALYSIS_RESULT_TYPE.WARNING,
+                            Compare = new FileSystemObject("C:\\Windows\\System32\\drivers\\etc\\hosts")
                         }
                     }
                 }
@@ -450,20 +457,32 @@ namespace Microsoft.CST.AttackSurfaceAnalyzer.Tests
 
             var sarif = AttackSurfaceAnalyzerClient.GenerateSarifLog(outputDictionary, Array.Empty<AsaRule>(), false);
 
-            Assert.AreEqual(2, sarif.Runs[0].Artifacts.Count);
+            Assert.AreEqual(3, sarif.Runs[0].Artifacts.Count);
 
             foreach (var artifact in sarif.Runs[0].Artifacts)
             {
                 Assert.IsNotNull(artifact.Location.Uri);
 
-                // Mirrors the consumer check: the path is split on '/' and the first path
-                // segment must not contain a colon.
-                var firstSegment = artifact.Location.Uri.OriginalString.Split('/')[0];
-                Assert.IsFalse(firstSegment.Contains(':'),
-                    $"First path segment of '{artifact.Location.Uri.OriginalString}' must not contain a colon.");
+                // Every artifact URI must be absolute, so the SARIF relative-reference rule
+                // (first path segment must not contain a colon) never applies.
+                Assert.IsTrue(artifact.Location.Uri.IsAbsoluteUri,
+                    $"'{artifact.Location.Uri.OriginalString}' must be an absolute URI.");
+
+                // A proper URI must not contain raw spaces.
+                Assert.IsFalse(artifact.Location.Uri.OriginalString.Contains(' '),
+                    $"'{artifact.Location.Uri.OriginalString}' must not contain unescaped spaces.");
             }
 
-            Assert.IsTrue(sarif.Runs[0].Artifacts.Any(a => a.Location.Uri.OriginalString == "./10132:svchost"));
+            // Process identities keep their PID:Name in the path of a type-tagged URI.
+            Assert.IsTrue(sarif.Runs[0].Artifacts.Any(a => a.Location.Uri.OriginalString == "asa://process/10132:svchost"));
+
+            // Registry identities become type-tagged URIs with backslashes mapped to path
+            // segments and spaces percent-encoded.
+            Assert.IsTrue(sarif.Runs[0].Artifacts.Any(a =>
+                a.Location.Uri.OriginalString == "asa://registry/Registry64_HKEY_CURRENT_USER/SOFTWARE/Classes/Local%20Settings/MrtCache/C:/Windows/resources.pri"));
+
+            // File paths remain valid absolute file:// URIs.
+            Assert.IsTrue(sarif.Runs[0].Artifacts.Any(a => a.Location.Uri.Scheme == "file"));
         }
     }
 }
