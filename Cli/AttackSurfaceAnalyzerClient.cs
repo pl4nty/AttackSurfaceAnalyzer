@@ -878,9 +878,16 @@ namespace Microsoft.CST.AttackSurfaceAnalyzer.Cli
                         }
                     };
 
-                    if (Uri.TryCreate(compareResult.Identity, UriKind.RelativeOrAbsolute, out Uri? outUri))
+                    if (Uri.TryCreate(compareResult.Identity, UriKind.Absolute, out Uri? absoluteUri))
                     {
-                        artifact.Location.Uri = outUri;
+                        artifact.Location.Uri = absoluteUri;
+                    }
+                    else
+                    {
+                        if (Uri.TryCreate($"./{compareResult.Identity}", UriKind.Relative, out Uri? relativeUri))
+                        {
+                            artifact.Location.Uri = relativeUri;
+                        }
                     }
 
                     artifact.SetProperty("Analysis", compareResult.Analysis);
