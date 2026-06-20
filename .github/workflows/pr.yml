@@ -1,0 +1,65 @@
+name: PR
+
+# Converted from Pipelines/asa-pr.yml (Azure DevOps).
+# Runs the pipeline-safe test suite on pull requests.
+
+on:
+  pull_request:
+    branches:
+      - main
+      - 'release/**'
+    paths:
+      - Benchmarks/**
+      - Cli/**
+      - Lib/**
+      - Pipelines/**
+      - Tests/**
+      - analyses.json
+      - .github/workflows/pr.yml
+  workflow_dispatch:
+
+concurrency:
+  group: pr-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Test (Windows)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # The committed nuget.config points at an internal Microsoft feed.
+      # Use the public (nuget.org) config so the build works outside Microsoft.
+      - name: Use public NuGet feed
+        shell: bash
+        run: cp NuGet.Config.Public nuget.config
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            9.0.x
+
+      - name: Restore
+        run: dotnet restore Tests/Tests.csproj
+
+      - name: Test
+        run: >
+          dotnet test Tests/Tests.csproj
+          -c Release
+          --no-restore
+          --filter TestCategory=PipelineSafeTests
+          --logger trx
+          --results-directory TestResults
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: TestResults/**/*.trx
+          if-no-files-found: ignore
