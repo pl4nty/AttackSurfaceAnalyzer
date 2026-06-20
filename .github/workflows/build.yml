@@ -1,0 +1,126 @@
+name: Build
+
+# Converted from Pipelines/asa-pr.yml / asa-release.yml (Azure DevOps).
+# Produces CLI publish archives and NuGet packages as build artifacts after
+# changes land on main or a release branch.
+#
+# Note: the original release pipeline also performs ESRP code signing,
+# AntiMalware scanning and publishing to nuget.org / GitHub Releases. Those
+# steps depend on Microsoft-internal infrastructure (1ES pools, signing certs)
+# and are intentionally not reproduced here.
+
+on:
+  push:
+    branches:
+      - main
+      - 'release/**'
+  workflow_dispatch:
+
+concurrency:
+  group: build-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    name: Publish ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux
+            os: ubuntu-latest
+            rid: linux-x64
+          - name: macos
+            os: macos-latest
+            rid: osx-x64
+          - name: win
+            os: windows-latest
+            rid: win-x64
+          - name: netcoreapp
+            os: ubuntu-latest
+            rid: ''
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Use public NuGet feed
+        shell: bash
+        run: cp NuGet.Config.Public nuget.config
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            9.0.x
+
+      - name: Install nbgv
+        shell: bash
+        run: |
+          dotnet tool install --global nbgv
+          echo "${HOME}/.dotnet/tools" >> "$GITHUB_PATH"
+
+      - name: Compute version
+        shell: bash
+        run: echo "VERSION=$(nbgv get-version -v NuGetPackageVersion)" >> "$GITHUB_ENV"
+
+      - name: Publish (framework-dependent, RID-specific)
+        if: matrix.rid != ''
+        shell: bash
+        run: >
+          dotnet publish Cli/Cli.csproj
+          -c Release
+          -f net9.0
+          -r ${{ matrix.rid }}
+          --self-contained false
+          -o "publish/ASA_${{ matrix.name }}_${VERSION}"
+
+      - name: Publish (framework-dependent, portable)
+        if: matrix.rid == ''
+        shell: bash
+        run: >
+          dotnet publish Cli/Cli.csproj
+          -c Release
+          -f net9.0
+          -o "publish/ASA_netcoreapp_${VERSION}"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ASA_${{ matrix.name }}
+          path: publish/*
+
+  pack:
+    name: Pack NuGet packages
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Use public NuGet feed
+        shell: bash
+        run: cp NuGet.Config.Public nuget.config
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            9.0.x
+
+      - name: Pack library
+        run: dotnet pack Lib/Lib.csproj -c Release -o packages
+
+      - name: Pack CLI tool
+        run: dotnet pack Cli/Cli.csproj -c Release -o packages
+
+      - name: Upload packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: nuget-packages
+          path: |
+            packages/*.nupkg
+            packages/*.snupkg
