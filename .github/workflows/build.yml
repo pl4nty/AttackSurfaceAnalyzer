@@ -4,13 +4,10 @@ name: Build
 # Produces CLI publish archives and NuGet packages as build artifacts after
 # changes land on main or a release branch.
 #
-# On main and release/** branches the archives and packages are also uploaded to
-# the rolling "latest" GitHub Release.
-#
 # Note: the original release pipeline also performs ESRP code signing,
-# AntiMalware scanning and publishing to nuget.org. Those steps depend on
-# Microsoft-internal infrastructure (1ES pools, signing certs) and are
-# intentionally not reproduced here.
+# AntiMalware scanning and publishing to nuget.org / GitHub Releases. Those
+# steps depend on Microsoft-internal infrastructure (1ES pools, signing certs)
+# and are intentionally not reproduced here.
 
 on:
   push:
@@ -27,8 +24,6 @@ jobs:
   publish:
     name: Publish ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
-    permissions:
-      contents: write
     strategy:
       fail-fast: false
       matrix:
@@ -91,25 +86,11 @@ jobs:
           -f net9.0
           -o "publish/ASA_netcoreapp_${VERSION}"
 
-      - name: Archive publish output
-        shell: bash
-        run: |
-          cd publish
-          7z a "../ASA_${{ matrix.name }}_${VERSION}.zip" "ASA_${{ matrix.name }}_${VERSION}"
-
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: ASA_${{ matrix.name }}
-          path: ASA_${{ matrix.name }}_*.zip
-
-      - name: Upload to latest release
-        if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/')
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: latest
-          prerelease: true
-          files: ASA_${{ matrix.name }}_*.zip
+          path: publish/*
 
   pack:
     name: Pack NuGet packages
@@ -138,20 +119,9 @@ jobs:
       - name: Pack CLI tool
         run: dotnet pack Cli/Cli.csproj -c Release -o packages
 
-      - name: Upload packages
-        uses: actions/upload-artifact@v4
-        with:
-          name: nuget-packages
-          path: |
-            packages/*.nupkg
-            packages/*.snupkg
-
       - name: Upload to latest release
-        if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/')
         uses: softprops/action-gh-release@v2
         with:
           tag_name: latest
           prerelease: true
-          files: |
-            packages/*.nupkg
-            packages/*.snupkg
+          files: packages/*
