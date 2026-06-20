@@ -4,10 +4,13 @@ name: Build
 # Produces CLI publish archives and NuGet packages as build artifacts after
 # changes land on main or a release branch.
 #
+# On main, the published CLI archives and NuGet packages are also uploaded to
+# the rolling "latest" GitHub Release (https://github.com/pl4nty/AttackSurfaceAnalyzer/releases/tag/latest).
+#
 # Note: the original release pipeline also performs ESRP code signing,
-# AntiMalware scanning and publishing to nuget.org / GitHub Releases. Those
-# steps depend on Microsoft-internal infrastructure (1ES pools, signing certs)
-# and are intentionally not reproduced here.
+# AntiMalware scanning and publishing to nuget.org. Those steps depend on
+# Microsoft-internal infrastructure (1ES pools, signing certs) and are
+# intentionally not reproduced here.
 
 on:
   push:
@@ -86,11 +89,17 @@ jobs:
           -f net9.0
           -o "publish/ASA_netcoreapp_${VERSION}"
 
+      - name: Archive publish output
+        shell: bash
+        run: |
+          cd publish
+          7z a "../ASA_${{ matrix.name }}_${VERSION}.zip" "ASA_${{ matrix.name }}_${VERSION}"
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: ASA_${{ matrix.name }}
-          path: publish/*
+          path: ASA_${{ matrix.name }}_*.zip
 
   pack:
     name: Pack NuGet packages
@@ -124,3 +133,28 @@ jobs:
           path: |
             packages/*.nupkg
             packages/*.snupkg
+
+  release:
+    name: Publish to latest release
+    needs: [publish, pack]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    permissions:
+      contents: write
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Publish to latest release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: Latest
+          prerelease: true
+          fail_on_unmatched_files: true
+          files: |
+            artifacts/**/*.zip
+            artifacts/**/*.nupkg
+            artifacts/**/*.snupkg
